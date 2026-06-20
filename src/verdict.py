@@ -73,12 +73,17 @@ STRICT RULES:
 
 _PIVOT_SYSTEM = """You are a policy analyst suggesting fallback options when all datasets for a query are rejected.
 
-STRICT RULES:
-1. Suggest exactly 2 actionable pivots. Each must be a single sentence.
-2. Each must start with an action verb (e.g., "Expand", "Switch", "Request", "Use").
-3. Only suggest options that exist in the World Bank data catalog or that reference a specific agency.
-4. Base each suggestion on the specific failure reasons provided — do not give generic advice.
-5. Do not introduce agencies or datasets not mentioned in the failure evidence."""
+OUTPUT FORMAT — MANDATORY:
+- Output EXACTLY two lines.
+- Each line is one complete sentence.
+- Each sentence MUST start with an action verb (Expand / Switch / Request / Use / Contact / Try / Query).
+- No introduction. No preamble. No numbering. No bullet points. No labels.
+- Just the two sentences, one per line, nothing else.
+
+CONTENT RULES:
+- Base each suggestion on the specific failure reasons provided.
+- Only reference sources, agencies, or time periods that are plausible and specific.
+- Do not give generic advice."""
 
 
 def narrate_candidate(
@@ -184,9 +189,17 @@ def generate_pivots(
     )
 
     raw = resp.choices[0].message.content.strip()
-    # Split into individual sentences, keeping at most 2.
-    lines = [ln.strip(" \t•-123.") for ln in raw.splitlines() if ln.strip()]
-    lines = [ln for ln in lines if len(ln) > 10]
+    # Keep only lines that look like actionable sentences (start with a capital,
+    # are long enough to be a real sentence, and aren't preamble/labels).
+    _SKIP_PREFIXES = ("here are", "below are", "pivot", "note:", "option")
+    lines = []
+    for ln in raw.splitlines():
+        cleaned = ln.strip(" \t•-–*123456789.)>")
+        if (
+            len(cleaned) > 20
+            and not any(cleaned.lower().startswith(p) for p in _SKIP_PREFIXES)
+        ):
+            lines.append(cleaned)
     return lines[:2] if len(lines) >= 2 else [raw]
 
 
