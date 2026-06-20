@@ -1,0 +1,35 @@
+{
+  "full": {
+    "indicator_code": "SI.POV.NAHC",
+    "indicator_name": "Poverty headcount ratio at national poverty lines (% of population)",
+    "unit": "%",
+    "source_org": "World Bank, Poverty and Inequality Platform",
+    "methodology_note": "National poverty headcount ratio is the percentage of the population living below the national poverty line(s). National estimates are based on population-weighted subgroup estimates from household surveys.",
+    "time_coverage": "1977–2022",
+    "geography_coverage": "Low- and middle-income countries",
+    "license": "CC BY 4.0",
+    "last_updated": "2024-01-15"
+  },
+  "partial": {
+    "indicator_code": "SI.POV.NAHC",
+    "indicator_name": "Poverty headcount ratio at national poverty lines (% of population)",
+    "unit": "%",
+    "source_org": "World Bank",
+    "methodology_note": null,
+    "time_coverage": null,
+    "geography_coverage": null,
+    "license": null,
+    "last_updated": "2022"
+  },
+  "minimal": {
+    "indicator_code": "SI.POV.NAHC",
+    "indicator_name": "Poverty headcount ratio",
+    "unit": null,
+    "source_org": null,
+    "methodology_note": null,
+    "time_coverage": null,
+    "geography_coverage": null,
+    "license": null,
+    "last_updated": null
+  }
+}
