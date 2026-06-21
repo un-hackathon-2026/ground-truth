@@ -1,14 +1,14 @@
 # ground-truth
 
-**Agentic Trust Copilot for UN development data** — UN Open Source Week, Challenge 3 (Agentic Copilots).
+**Agentic Trust Copilot for UN development data**  UN Open Source Week, Challenge 3 (Agentic Copilots).
 
 Ask a development-data question in plain English. Ground Truth searches the
 **UN Data Commons** for the indicators that match, lets you choose the one you
-mean, then checks whether that dataset can be *trusted* — including whether
-independent sources agree on the numbers — and returns a clear
+mean, then checks whether that dataset can be *trusted*, including whether
+independent sources agree on the numbers, and returns a clear
 **PASS / REVIEW / REJECT** verdict with the evidence chain visible.
 
-> Most tools answer with a number. Ground Truth tells you whether to trust it —
+> Most tools answer with a number. Ground Truth tells you whether to trust it 
 > and when sources disagree, it shows you the conflict and lets a human decide.
 
 ---
@@ -22,19 +22,19 @@ question  ->  search the Commons  ->  you pick  ->  trust check  ->  verdict
                                                                      REJECT
 ```
 
-1. **Discovery** — a free-form question is parsed into a concept + country, and
+1. **Discovery**: a free-form question is parsed into a concept + country, and
    the Commons `search_indicators` tool finds matching indicators live. An LLM
    groups the raw results into clean, human-readable choices (no hardcoded list).
-2. **You choose** — the matching indicators are shown; you pick the one you mean
+2. **You choose**: the matching indicators are shown; you pick the one you mean
    (or paste your own Commons variable id).
-3. **Verification** — the chosen indicator is fetched from the Commons and scored
+3. **Verification**: the chosen indicator is fetched from the Commons and scored
    on four dimensions:
    - Metadata completeness
    - Data quality
    - Freshness
    - **Cross-source agreement** — do independent sources report the same value?
-4. **Verdict** — `PASS` (trustworthy), `REVIEW` (usable, but sources disagree —
-   a human chooses which to trust), or `REJECT` (not fit — try an alternative).
+4. **Verdict**: `PASS` (trustworthy), `REVIEW` (usable, but sources disagree 
+   a human chooses which to trust), or `REJECT` (not fit, try an alternative).
    On REVIEW, every conflicting source is shown with its value and provenance.
 
 ---
