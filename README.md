@@ -13,7 +13,7 @@ independent sources agree on the numbers, and returns a clear
 
 ---
 
-## How it works — the agentic flow
+## How it works > the agentic flow
 
 ```
 question  ->  search the Commons  ->  you pick  ->  trust check  ->  verdict
@@ -32,7 +32,7 @@ question  ->  search the Commons  ->  you pick  ->  trust check  ->  verdict
    - Metadata completeness
    - Data quality
    - Freshness
-   - **Cross-source agreement** — do independent sources report the same value?
+   - **Cross-source agreement**  do independent sources report the same value?
 4. **Verdict**: `PASS` (trustworthy), `REVIEW` (usable, but sources disagree 
    a human chooses which to trust), or `REJECT` (not fit, try an alternative).
    On REVIEW, every conflicting source is shown with its value and provenance.
