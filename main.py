@@ -23,7 +23,7 @@ SEP = "─" * WIDTH
 SEP_THIN = "·" * WIDTH
 
 STATUS_SYMBOLS = {"VIABLE": "✓ VIABLE", "NOT_VIABLE": "✗ NOT VIABLE"}
-VERDICT_SYMBOLS = {"PASS": "  [PASS]", "REJECT": "  [REJECT]"}
+VERDICT_SYMBOLS = {"PASS": "  [PASS]", "REVIEW": "  [REVIEW]", "REJECT": "  [REJECT]"}
 
 
 def print_report(report: MultiDatasetReport) -> None:
@@ -48,9 +48,9 @@ def print_report(report: MultiDatasetReport) -> None:
     overall = report.overall_status
     print(f"\n  Overall Status: {STATUS_SYMBOLS[overall]}")
     if overall == "VIABLE":
-        passing = [c for c in report.candidates if c.verdict == "PASS"]
+        usable = [c for c in report.candidates if c.verdict in ("PASS", "REVIEW")]
         print(
-            f"  {len(passing)} of {len(report.candidates)} candidate dataset(s) passed. "
+            f"  {len(usable)} of {len(report.candidates)} candidate dataset(s) usable. "
             "See details below."
         )
     else:
@@ -67,7 +67,7 @@ def print_report(report: MultiDatasetReport) -> None:
 
         print()
         print(f"  {'═' * 66}")
-        verdict_tag = "✓ PASS" if v == "PASS" else "✗ REJECT"
+        verdict_tag = {"PASS": "✓ PASS", "REVIEW": "⚑ REVIEW", "REJECT": "✗ REJECT"}[v]
         name = di.indicator_name or di.indicator_code
         print(f"  Dataset {i}: {name}")
         print(f"  Verdict : {verdict_tag}")
@@ -100,6 +100,16 @@ def print_report(report: MultiDatasetReport) -> None:
         print(f"    Freshness              {_bar(fr.score)}  {fr.score:.0%}")
         print(f"      {fr.note}")
 
+        # 4th dimension — cross-source agreement (NEW)
+        cs = scores.cross_source
+        if cs:
+            print(f"    Cross-Source Agreement {_bar(cs.score)}  {cs.score:.0%}")
+            detail = (f"      {cs.status} — {cs.source_count} sources "
+                      f"({cs.authoritative_count} authoritative)")
+            if cs.spread_pct:
+                detail += f", spread {cs.spread_pct}%"
+            print(detail)
+
         # Operational explanation
         print()
         print(f"  Assessment")
@@ -116,6 +126,16 @@ def print_report(report: MultiDatasetReport) -> None:
             print()
             for line in _wrap(f"{i}. {pivot}", WIDTH - 4):
                 print(f"  {line}")
+
+    # Chain recommendations — related follow-up queries (NEW)
+    if report.chain:
+        print()
+        print(SEP)
+        print("  RELATED QUERIES (chain)")
+        print(SEP)
+        for ch in report.chain:
+            print(f"  → {ch.label}")
+            print(f"      {ch.reason}")
 
     print()
     print(SEP)
