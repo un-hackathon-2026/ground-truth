@@ -46,21 +46,16 @@ _NO_OBS_SCORES = DimensionScores(
 
 
 def _attach_cross_source(candidate: CandidateResult) -> CandidateResult:
-    """
-    Run the cross-source check for this candidate's indicator, attach it as the
-    4th dimension, and upgrade the verdict to PASS/REVIEW/REJECT.
-    Fully defensive: any failure leaves the candidate unchanged.
-    """
+    """Run the cross-source check, attach as 4th dimension, upgrade verdict.
+    Fully defensive: any failure leaves the candidate unchanged."""
     try:
         result = cross_source_check(
             indicator_code=candidate.dataset_info.indicator_code,
-            iso3=candidate.dataset_info.geography,
-            narrate=False,   # keep deterministic in the pipeline; UI can narrate
+            iso3=candidate.dataset_info.geography, narrate=False,
         )
         dim = to_cross_source_dimension(result)
         candidate.dimension_scores.cross_source = dim
         candidate.verdict = extended_verdict(candidate.verdict, candidate.dimension_scores)
-        # If it became REVIEW, surface that in the explanation.
         if candidate.verdict == "REVIEW":
             candidate.operational_explanation = (
                 "NEEDS HUMAN REVIEW — independent sources disagree on this value "
@@ -70,97 +65,126 @@ def _attach_cross_source(candidate: CandidateResult) -> CandidateResult:
                 + candidate.operational_explanation
             )
     except Exception:
-        # Cross-source is additive; never let it break the base pipeline.
         pass
     return candidate
 
 
-def run(raw_query: str) -> MultiDatasetReport:
-    """Run the full multi-dataset pipeline (now with the 4th dimension + chain)."""
-    # Step 1 — Query Parsing
+# ===========================================================================
+# PHASE 1 — get_candidates: parse the query and return the dataset choices.
+# Cheap: no fetching, no scoring. This is what the user picks from.
+# ===========================================================================
+
+def get_candidates(raw_query: str) -> "CandidateList":
+    from .schemas import CandidateList, CandidateOption
     try:
         structured = parse_query(raw_query)
     except ValidationError as exc:
         first = exc.errors()[0]
         field = ".".join(str(l) for l in first["loc"])
-        return make_error_report(
-            raw_query,
-            f"Query parameters failed validation on field '{field}': {first['msg']}",
+        return CandidateList(
+            query=raw_query, topic="unknown", geography="unknown", time_range=None,
+            parse_error=f"Query parameters failed validation on field '{field}': {first['msg']}",
         )
+    except RuntimeError as exc:
+        return CandidateList(
+            query=raw_query, topic="unknown", geography="unknown", time_range=None,
+            parse_error=f"Query parsing failed: {exc}",
+        )
+
+    options = [
+        CandidateOption(index=i, indicator_name=label, indicator_code=code)
+        for i, (label, code) in enumerate(structured.candidates, 1)
+    ]
+    return CandidateList(
+        query=raw_query, topic=structured.topic, geography=structured.geography,
+        time_range=structured.time_range, options=options,
+    )
+
+
+# ===========================================================================
+# PHASE 2 — evaluate_selection: run the deep pipeline on ONLY the chosen
+# indicator codes (the ones the user selected). This is the expensive part,
+# and it only runs after the human has chosen.
+# ===========================================================================
+
+def _evaluate_one(structured, indicator_label: str, indicator_code: str) -> CandidateResult:
+    api_url = (
+        f"https://api.worldbank.org/v2/country/{structured.geography}"
+        f"/indicator/{indicator_code}?format=json"
+    )
+    fetch_result = fetch_by_code(
+        geography=structured.geography, indicator_code=indicator_code,
+        time_range=structured.time_range,
+    )
+    if isinstance(fetch_result, FetchError):
+        return CandidateResult(
+            dataset_info=DatasetInfo(indicator_name=indicator_label,
+                indicator_code=indicator_code, geography=structured.geography, api_url=api_url),
+            dimension_scores=_NO_OBS_SCORES, verdict="REJECT",
+            operational_explanation=f"Data fetch failed: {fetch_result.reason}",
+        )
+    dataset, metadata = fetch_result
+    if not dataset.rows:
+        return CandidateResult(
+            dataset_info=DatasetInfo(indicator_name=metadata.indicator_name or indicator_label,
+                indicator_code=indicator_code, geography=structured.geography,
+                source_org=metadata.source_org, api_url=api_url, last_updated=metadata.last_updated),
+            dimension_scores=_NO_OBS_SCORES, verdict="REJECT",
+            operational_explanation="No observations exist for the requested geography and time range.",
+        )
+    scores = compute_dimension_scores(dataset, metadata)
+    years = [r.year for r in dataset.rows]
+    dataset_info = DatasetInfo(
+        indicator_name=metadata.indicator_name or indicator_label,
+        indicator_code=indicator_code, geography=structured.geography,
+        years_in_data=(min(years), max(years)), row_count=len(dataset.rows),
+        non_null_count=sum(1 for r in dataset.rows if r.value is not None),
+        source_org=metadata.source_org, api_url=api_url, last_updated=metadata.last_updated,
+    )
+    candidate = evaluate_candidate(dataset_info, scores)   # base 3-dim verdict
+    candidate = _attach_cross_source(candidate)            # + 4th dimension
+    return candidate
+
+
+def evaluate_selection(
+    raw_query: str,
+    selected_codes: Optional[list[str]] = None,
+) -> MultiDatasetReport:
+    """
+    Run the deep pipeline on the user's CHOSEN datasets.
+    If selected_codes is None, evaluate all candidates (back-compat = old run()).
+    """
+    try:
+        structured = parse_query(raw_query)
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        field = ".".join(str(l) for l in first["loc"])
+        return make_error_report(raw_query,
+            f"Query parameters failed validation on field '{field}': {first['msg']}")
     except RuntimeError as exc:
         return make_error_report(raw_query, f"Query parsing failed: {exc}")
 
-    results: list[CandidateResult] = []
+    all_candidates = structured.candidates
+    if selected_codes:
+        chosen = [(lbl, code) for (lbl, code) in all_candidates if code in selected_codes]
+        # allow user-supplied custom codes not in the catalog
+        known = {code for _, code in all_candidates}
+        for code in selected_codes:
+            if code not in known:
+                chosen.append((code, code))   # custom indicator code from the user
+    else:
+        chosen = all_candidates
 
-    for indicator_label, indicator_code in structured.candidates:
-        api_url = (
-            f"https://api.worldbank.org/v2/country/{structured.geography}"
-            f"/indicator/{indicator_code}?format=json"
-        )
+    results = [_evaluate_one(structured, lbl, code) for lbl, code in chosen]
 
-        fetch_result = fetch_by_code(
-            geography=structured.geography,
-            indicator_code=indicator_code,
-            time_range=structured.time_range,
-        )
-
-        if isinstance(fetch_result, FetchError):
-            results.append(CandidateResult(
-                dataset_info=DatasetInfo(
-                    indicator_name=indicator_label, indicator_code=indicator_code,
-                    geography=structured.geography, api_url=api_url,
-                ),
-                dimension_scores=_NO_OBS_SCORES,
-                verdict="REJECT",
-                operational_explanation=f"Data fetch failed: {fetch_result.reason}",
-            ))
-            continue
-
-        dataset, metadata = fetch_result
-
-        if not dataset.rows:
-            results.append(CandidateResult(
-                dataset_info=DatasetInfo(
-                    indicator_name=metadata.indicator_name or indicator_label,
-                    indicator_code=indicator_code, geography=structured.geography,
-                    source_org=metadata.source_org, api_url=api_url,
-                    last_updated=metadata.last_updated,
-                ),
-                dimension_scores=_NO_OBS_SCORES,
-                verdict="REJECT",
-                operational_explanation=(
-                    "No observations exist for the requested geography and time range."
-                ),
-            ))
-            continue
-
-        scores = compute_dimension_scores(dataset, metadata)
-        years = [r.year for r in dataset.rows]
-        dataset_info = DatasetInfo(
-            indicator_name=metadata.indicator_name or indicator_label,
-            indicator_code=indicator_code, geography=structured.geography,
-            years_in_data=(min(years), max(years)),
-            row_count=len(dataset.rows),
-            non_null_count=sum(1 for r in dataset.rows if r.value is not None),
-            source_org=metadata.source_org, api_url=api_url,
-            last_updated=metadata.last_updated,
-        )
-
-        candidate = evaluate_candidate(dataset_info, scores)   # base 3-dim verdict
-        candidate = _attach_cross_source(candidate)            # + 4th dimension
-        results.append(candidate)
-
-    # Overall status: any PASS or REVIEW counts as viable (REVIEW = usable w/ a human)
     usable = any(r.verdict in ("PASS", "REVIEW") for r in results)
     overall_status = "VIABLE" if (usable and results) else "NOT_VIABLE"
 
     pivots: list[str] = []
     if not usable and results:
-        pivots = generate_pivots(
-            structured.topic, structured.geography, structured.time_range, results,
-        )
+        pivots = generate_pivots(structured.topic, structured.geography,
+                                 structured.time_range, results)
 
-    # NEW — chain recommendations (neighbouring countries, same topic)
     chain = chain_recommendations(structured.topic, structured.geography)
 
     return MultiDatasetReport(
@@ -168,3 +192,8 @@ def run(raw_query: str) -> MultiDatasetReport:
         time_range=structured.time_range, candidates=results,
         overall_status=overall_status, pivots=pivots, chain=chain,
     )
+
+
+# Backward-compatible entry point: evaluate everything (old behaviour).
+def run(raw_query: str) -> MultiDatasetReport:
+    return evaluate_selection(raw_query, selected_codes=None)
