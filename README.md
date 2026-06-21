@@ -28,9 +28,9 @@ Runs only on the indicator(s) the user selected:
      Authoritative sources (official statistics) are counted separately from
      crowd-sourced ones (Wikipedia/Wikidata).
 3. **Verdict:** `PASS` · `REVIEW` · `REJECT`
-   - `REVIEW` = the data may be fine, but authoritative sources disagree —
+   - `REVIEW` = the data may be fine, but authoritative sources disagree,
      route to a human to choose which to trust.
-4. **Chain recommendations** — suggests the same indicator for neighbouring
+4. **Chain recommendations**  suggests the same indicator for neighbouring
    countries so the user can compare across a region.
 
 The two functions are exposed for the front-end: call `get_candidates()` to
