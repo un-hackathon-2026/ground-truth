@@ -1,5 +1,10 @@
 """
 Data contracts for the Query Trust & Viability Assessor pipeline.
+
+MODIFIED (Chichi): added 4th dimension (cross_source_agreement), a REVIEW
+verdict state, the per-candidate CrossSourceResult, and chain recommendations.
+All additions are backward-compatible (Optional / defaults) so existing code
+keeps working.
 """
 
 from __future__ import annotations
@@ -9,7 +14,7 @@ from pydantic import BaseModel, field_validator
 
 
 # ---------------------------------------------------------------------------
-# Fixed catalogs
+# Fixed catalogs  (unchanged)
 # ---------------------------------------------------------------------------
 
 VALID_ISO3_CODES: frozenset[str] = frozenset({
@@ -33,10 +38,21 @@ VALID_ISO3_CODES: frozenset[str] = frozenset({
     "YEM", "ZMB", "ZWE",
 })
 
-# Topic groups: each topic maps to 3-4 World Bank indicators that together
-# cover the concept from different angles.  The pipeline evaluates EVERY
-# indicator in the matched group so the analyst sees the full candidate set.
-# Format: (human_label, WB_indicator_code)
+# Neighbour groups for chain recommendations ("want neighbouring countries?").
+# Small curated map — extend as needed. Keyed by ISO3.
+NEIGHBOURS: dict[str, list[str]] = {
+    "KEN": ["TZA", "UGA", "ETH", "SOM", "SSD"],
+    "NGA": ["BEN", "NER", "TCD", "CMR"],
+    "ZAF": ["NAM", "BWA", "ZWE", "MOZ", "LSO", "SWZ"],
+    "IND": ["PAK", "BGD", "NPL", "LKA", "BTN", "MMR"],
+    "BRA": ["ARG", "BOL", "PER", "COL", "PRY", "URY"],
+    "EGY": ["LBY", "SDN", "ISR"],
+    "ETH": ["KEN", "SOM", "SSD", "ERI", "DJI"],
+    "GHA": ["CIV", "BFA", "TGO"],
+    "UGA": ["KEN", "TZA", "RWA", "SSD", "COD"],
+    "TZA": ["KEN", "UGA", "RWA", "BDI", "MOZ", "ZMB", "MWI"],
+}
+
 TOPIC_GROUPS: dict[str, list[tuple[str, str]]] = {
     "poverty and inequality": [
         ("National Poverty Headcount Ratio", "SI.POV.NAHC"),
@@ -90,15 +106,12 @@ TOPIC_GROUPS: dict[str, list[tuple[str, str]]] = {
 
 
 # ---------------------------------------------------------------------------
-# Step 1 output: StructuredQuery  (topic-based, not single-indicator)
+# Step 1 output: StructuredQuery  (unchanged)
 # ---------------------------------------------------------------------------
 
 class StructuredQuery(BaseModel):
-    """Parsed, validated query. `topic` maps to a TOPIC_GROUPS key;
-    the pipeline resolves all candidate indicators from that group."""
-
-    topic: str                              # must be a key in TOPIC_GROUPS
-    geography: str                          # ISO 3166-1 alpha-3, uppercased
+    topic: str
+    geography: str
     time_range: Optional[tuple[int, int]] = None
     comparison_requested: bool = False
 
@@ -145,7 +158,7 @@ class StructuredQuery(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Step 2 outputs: RawDataset, RawMetadata, FetchError
+# Step 2 outputs  (unchanged)
 # ---------------------------------------------------------------------------
 
 class DataRow(BaseModel):
@@ -177,7 +190,6 @@ class FetchError(BaseModel):
 
 
 class DatasetInfo(BaseModel):
-    """Provenance record shown to the user for each evaluated dataset."""
     indicator_name: Optional[str] = None
     indicator_code: str
     geography: str
@@ -190,7 +202,7 @@ class DatasetInfo(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Step 3 output: DimensionScores
+# Step 3 output: DimensionScores  (+ NEW 4th dimension)
 # ---------------------------------------------------------------------------
 
 class MetadataCompletenessScore(BaseModel):
@@ -210,34 +222,55 @@ class FreshnessScore(BaseModel):
     note: str
 
 
+# NEW — 4th dimension
+class CrossSourceScore(BaseModel):
+    """How well independent sources agree on the same value."""
+    score: float                       # 1.0 = identical, lower = wider spread
+    status: Literal[
+        "AGREE", "CONFLICT", "SINGLE_SOURCE", "NO_DATA", "NO_COMMONS_EQUIVALENT"
+    ]
+    spread_pct: Optional[float] = None
+    source_count: int = 0
+    authoritative_count: int = 0       # how many are official (not Wikipedia etc.)
+    note: str = ""
+
+
 class DimensionScores(BaseModel):
     metadata_completeness: MetadataCompletenessScore
     data_quality: DataQualityScore
     freshness: FreshnessScore
+    # NEW — Optional so existing fixtures/tests that build 3 dims still validate
+    cross_source: Optional[CrossSourceScore] = None
 
 
 # ---------------------------------------------------------------------------
-# Step 4 output: CandidateResult + MultiDatasetReport
+# Step 4 output  (+ REVIEW verdict, + chain recommendations)
 # ---------------------------------------------------------------------------
 
 class CandidateResult(BaseModel):
-    """Trust evaluation for a single candidate dataset."""
     dataset_info: DatasetInfo
     dimension_scores: DimensionScores
-    verdict: Literal["PASS", "REJECT"]
-    # Operational consequences in plain language, NOT raw score percentages.
+    # was Literal["PASS","REJECT"] — REVIEW added for cross-source conflicts
+    verdict: Literal["PASS", "REVIEW", "REJECT"]
     operational_explanation: str
 
 
+class ChainRecommendation(BaseModel):
+    """A suggested follow-up query (the 'want neighbouring countries?' chain)."""
+    label: str            # human text, e.g. "Compare with Tanzania"
+    geography: str        # ISO3 to query next
+    topic: str            # same topic, different place
+    reason: str           # why it's suggested
+
+
 class MultiDatasetReport(BaseModel):
-    """Top-level output: all candidates evaluated, overall status, pivots."""
     query: str
     topic: str
     geography: str
     time_range: Optional[tuple[int, int]]
     candidates: list[CandidateResult]
     overall_status: Literal["VIABLE", "NOT_VIABLE"]
-    # Populated only when overall_status == "NOT_VIABLE"
     pivots: list[str] = []
-    # Populated on parse/fetch failures before any candidate could be evaluated
     parse_error: Optional[str] = None
+    # NEW — chain recommendations (follow-up queries)
+    chain: list[ChainRecommendation] = []
