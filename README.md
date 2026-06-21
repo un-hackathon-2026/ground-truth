@@ -1,17 +1,17 @@
 # ground-truth
 
-**Trust & Viability Copilot for development data** — UN Open Source Week Hackathon, Challenge 3.
+**Trust & Viability Copilot for development data** - UN Open Source Week Hackathon, Challenge 3.
 
 Given a natural-language question about development data, the system suggests
 candidate datasets, lets the user pick one, then deeply evaluates that dataset's
 trustworthiness across four dimensions — including whether independent sources
-*agree* on the numbers — and returns a clear PASS / REVIEW / REJECT verdict.
+*agree* on the numbers and returns a clear PASS / REVIEW / REJECT verdict.
 
 Data is fetched live from the **World Bank API** and the **UN Data Commons**.
 
 ---
 
-## How it works — two phases
+## How it works - two phases
 
 **Phase 1 · `get_candidates(query)`** *(cheap, no fetching)*
 The query is parsed (topic, country, time period) and matched to a set of
@@ -24,7 +24,7 @@ Runs only on the indicator(s) the user selected:
    - Metadata completeness
    - Data quality
    - Freshness
-   - **Cross-source agreement** — do independent sources report the same value?
+   - **Cross-source agreement** - do independent sources report the same value?
      Authoritative sources (official statistics) are counted separately from
      crowd-sourced ones (Wikipedia/Wikidata).
 3. **Verdict:** `PASS` · `REVIEW` · `REJECT`
@@ -91,6 +91,6 @@ On Windows, prefix with UTF-8 so the report characters render:
 
 ## Branches
 
-- `main` / `initial` — base pipeline (3 dimensions, World Bank only).
-- `cross-source-layer` — adds the cross-source conflict layer, 4th dimension,
+- `main` / `initial` - base pipeline (3 dimensions, World Bank only).
+- `cross-source-layer` - adds the cross-source conflict layer, 4th dimension,
   REVIEW verdict, chain recommendations, and the two-phase split.
