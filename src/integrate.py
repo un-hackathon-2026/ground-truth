@@ -96,14 +96,18 @@ def chain_recommendations(
     suggest the same topic for neighbours so the user can compare across a
     region. Deterministic, grounded in the NEIGHBOURS map — no LLM needed.
     """
+    from .schemas import country_name
     iso = geography.upper()
+    here = country_name(iso)
     neighbours = NEIGHBOURS.get(iso, [])
     out: list[ChainRecommendation] = []
     for nb in neighbours[:max_items]:
+        nb_name = country_name(nb)
         out.append(ChainRecommendation(
-            label=f"Compare {topic} with {nb}",
+            label=f"Compare {topic} with {nb_name} ({nb})",
             geography=nb,
             topic=topic,
-            reason=f"{nb} is a neighbour of {iso}; comparing reveals regional patterns.",
+            reason=f"{nb_name} borders {here} — comparing the same indicator "
+                   "across neighbours reveals regional patterns and outliers.",
         ))
     return out

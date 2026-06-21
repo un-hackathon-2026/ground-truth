@@ -53,6 +53,27 @@ NEIGHBOURS: dict[str, list[str]] = {
     "TZA": ["KEN", "UGA", "RWA", "BDI", "MOZ", "ZMB", "MWI"],
 }
 
+# ISO3 -> human-readable country name (for display; codes shown in parentheses).
+COUNTRY_NAMES: dict[str, str] = {
+    "KEN": "Kenya", "TZA": "Tanzania", "UGA": "Uganda", "ETH": "Ethiopia",
+    "SOM": "Somalia", "SSD": "South Sudan", "NGA": "Nigeria", "BEN": "Benin",
+    "NER": "Niger", "TCD": "Chad", "CMR": "Cameroon", "ZAF": "South Africa",
+    "NAM": "Namibia", "BWA": "Botswana", "ZWE": "Zimbabwe", "MOZ": "Mozambique",
+    "LSO": "Lesotho", "SWZ": "Eswatini", "IND": "India", "PAK": "Pakistan",
+    "BGD": "Bangladesh", "NPL": "Nepal", "LKA": "Sri Lanka", "BTN": "Bhutan",
+    "MMR": "Myanmar", "BRA": "Brazil", "ARG": "Argentina", "BOL": "Bolivia",
+    "PER": "Peru", "COL": "Colombia", "PRY": "Paraguay", "URY": "Uruguay",
+    "EGY": "Egypt", "LBY": "Libya", "SDN": "Sudan", "ISR": "Israel",
+    "ERI": "Eritrea", "DJI": "Djibouti", "GHA": "Ghana", "CIV": "Côte d'Ivoire",
+    "BFA": "Burkina Faso", "TGO": "Togo", "RWA": "Rwanda", "COD": "DR Congo",
+    "BDI": "Burundi", "ZMB": "Zambia", "MWI": "Malawi",
+}
+
+
+def country_name(iso3: str) -> str:
+    """Human name for an ISO3 code, falling back to the code itself."""
+    return COUNTRY_NAMES.get(iso3.upper(), iso3.upper())
+
 TOPIC_GROUPS: dict[str, list[tuple[str, str]]] = {
     "poverty and inequality": [
         ("National Poverty Headcount Ratio", "SI.POV.NAHC"),
@@ -274,3 +295,25 @@ class MultiDatasetReport(BaseModel):
     parse_error: Optional[str] = None
     # NEW — chain recommendations (follow-up queries)
     chain: list[ChainRecommendation] = []
+
+
+# ---------------------------------------------------------------------------
+# Phase 1 outputs: the candidate list the user chooses from (NEW)
+# ---------------------------------------------------------------------------
+
+class CandidateOption(BaseModel):
+    """One dataset the user can pick — shown BEFORE any deep evaluation."""
+    index: int                 # 1-based, for the user to select
+    indicator_name: str
+    indicator_code: str
+
+
+class CandidateList(BaseModel):
+    """Phase 1 result: what we'd evaluate, shown to the user to choose from.
+    No fetching or scoring has happened yet — this is cheap."""
+    query: str
+    topic: str
+    geography: str
+    time_range: Optional[tuple[int, int]]
+    options: list[CandidateOption] = []
+    parse_error: Optional[str] = None
