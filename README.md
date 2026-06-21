@@ -1,10 +1,10 @@
 # ground-truth
 
-**Trust & Viability Copilot for development data** - UN Open Source Week Hackathon, Challenge 3.
+**Trust & Viability Copilot for development data**  UN Open Source Week Hackathon, Challenge 3.
 
 Given a natural-language question about development data, the system suggests
 candidate datasets, lets the user pick one, then deeply evaluates that dataset's
-trustworthiness across four dimensions — including whether independent sources
+trustworthiness across four dimensions, including whether independent sources
 *agree* on the numbers and returns a clear PASS / REVIEW / REJECT verdict.
 
 Data is fetched live from the **World Bank API** and the **UN Data Commons**.
