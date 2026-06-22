@@ -102,8 +102,10 @@ _CONCEPT_TOOL = {
                     "'access to clean water', 'CO2 emissions per capita'. Plain words."},
                 "geography": {"type": "string",
                     "description": "ISO 3166-1 alpha-3 country code, e.g. KEN, NGA, IND."},
-                "time_range_start": {"type": "integer"},
-                "time_range_end": {"type": "integer"},
+                "time_range_start": {"type": ["integer", "null"],
+                    "description": "Start year if the user states one; null if not specified."},
+                "time_range_end": {"type": ["integer", "null"],
+                    "description": "End year if the user states one; null if not specified."},
             },
             "required": ["concept", "geography"],
         },
@@ -121,23 +123,39 @@ class AgenticQuery:
 
 
 def parse_concept(raw_query: str) -> AgenticQuery:
-    """Extract concept + country + years. Raises RuntimeError on LLM failure."""
-    resp = _client().chat.completions.create(
-        model="llama-3.3-70b-versatile", max_tokens=200,
-        messages=[
-            {"role": "system", "content":
-             "Extract the data concept, country, and years from the user's "
-             "question by calling extract_concept. Concept is plain words "
-             "(the thing being measured), not a code."},
-            {"role": "user", "content": raw_query},
-        ],
-        tools=[_CONCEPT_TOOL],
-        tool_choice={"type": "function", "function": {"name": "extract_concept"}},
-    )
-    calls = resp.choices[0].message.tool_calls
-    if not calls:
-        raise RuntimeError("LLM did not extract a concept.")
-    p = json.loads(calls[0].function.arguments)
+    """Extract concept + country + years. Raises RuntimeError on any failure
+    (caught upstream and shown to the user as a friendly message)."""
+    try:
+        resp = _client().chat.completions.create(
+            model="llama-3.3-70b-versatile", max_tokens=200,
+            messages=[
+                {"role": "system", "content":
+                 "Extract the data concept, country, and years from the user's "
+                 "question by calling extract_concept. Concept is plain words "
+                 "(the thing being measured), not a code. If the user does not "
+                 "give years, set time_range_start and time_range_end to null."},
+                {"role": "user", "content": raw_query},
+            ],
+            tools=[_CONCEPT_TOOL],
+            tool_choice={"type": "function", "function": {"name": "extract_concept"}},
+        )
+        calls = resp.choices[0].message.tool_calls
+        if not calls:
+            raise RuntimeError("Could not identify a data concept in the question.")
+        p = json.loads(calls[0].function.arguments)
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError(
+            "Could not understand the question. Try including a clear topic and "
+            "country, e.g. 'under-5 mortality in Kenya 2018-2022'."
+        ) from exc
+
+    if not p.get("concept") or not p.get("geography"):
+        raise RuntimeError(
+            "Please include both a topic and a country, "
+            "e.g. 'under-5 mortality in Kenya'."
+        )
 
     tr = None
     s, e = p.get("time_range_start"), p.get("time_range_end")

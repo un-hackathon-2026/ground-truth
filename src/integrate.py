@@ -77,12 +77,12 @@ def extended_verdict(
 
     cs = scores.cross_source
     if cs is None:
-        return base_verdict  # no cross-source info → unchanged
+        return base_verdict  # no cross-source info -> unchanged
 
     if cs.status == "CONFLICT" and cs.authoritative_count >= 2:
         return "REVIEW"
 
-    # conflict driven ONLY by non-authoritative sources → note it, but still PASS
+    # conflict driven ONLY by non-authoritative sources -> note it, but still PASS
     return base_verdict
 
 
@@ -93,8 +93,10 @@ def chain_recommendations(
 ) -> list[ChainRecommendation]:
     """
     The 'want a neighbouring country?' chain. After answering for one country,
-    suggest the same topic for neighbours so the user can compare across a
-    region. Deterministic, grounded in the NEIGHBOURS map — no LLM needed.
+    suggest the SAME indicator for a neighbour — as a single-country query that
+    the pipeline can actually run (we do not do multi-country comparison yet,
+    so we do NOT phrase these as "Compare X with Y").
+    Deterministic, grounded in the NEIGHBOURS map — no LLM needed.
     """
     from .schemas import country_name
     iso = geography.upper()
@@ -104,10 +106,10 @@ def chain_recommendations(
     for nb in neighbours[:max_items]:
         nb_name = country_name(nb)
         out.append(ChainRecommendation(
-            label=f"Compare {topic} with {nb_name} ({nb})",
+            label=f"{topic} in {nb_name} ({nb})",
             geography=nb,
             topic=topic,
-            reason=f"{nb_name} borders {here} — comparing the same indicator "
-                   "across neighbours reveals regional patterns and outliers.",
+            reason=f"{nb_name} borders {here} — running the same indicator for a "
+                   "neighbour lets you compare regional patterns side by side.",
         ))
     return out

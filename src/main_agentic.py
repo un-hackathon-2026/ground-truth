@@ -27,6 +27,21 @@ from .fetch_commons import fetch_commons_facets
 SEP = "-" * 70
 
 
+def _wrap(text: str, width: int = 64, indent: str = "         ") -> list[str]:
+    """Wrap a paragraph to width, with a hanging indent. Plain, no deps."""
+    words = text.split()
+    lines, cur = [], ""
+    for w in words:
+        if len(cur) + len(w) + 1 > width:
+            lines.append(indent + cur.strip())
+            cur = w
+        else:
+            cur = (cur + " " + w) if cur else w
+    if cur:
+        lines.append(indent + cur.strip())
+    return lines
+
+
 def _print_candidates(cl) -> None:
     print(f"\n{SEP}")
     print("  CANDIDATE DATASETS  (from the live UN Commons search)")
@@ -94,6 +109,12 @@ def _print_report(report) -> None:
                   f"({s.cross_source.source_count} src)")
         else:
             print()
+
+        # Why this verdict — the operational explanation (transparency).
+        if c.operational_explanation:
+            print()
+            for line in _wrap(c.operational_explanation, width=64, indent="         "):
+                print(line)
 
         # The differentiator made actionable: at REVIEW, show the conflict.
         if c.verdict == "REVIEW" and s.cross_source and s.cross_source.status == "CONFLICT":
