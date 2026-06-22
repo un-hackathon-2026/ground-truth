@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FileText, Download, Loader2 } from "lucide-react";
+import { useTokens } from "@/lib/tokenContext";
 
 interface Props {
   dataset?: string;
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function SynthesisEngine({ dataset, country, name }: Props) {
+  const { addUsage } = useTokens();
   const [instructions, setInstructions] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [memo, setMemo] = useState("");
@@ -29,7 +31,7 @@ export default function SynthesisEngine({ dataset, country, name }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dataset, country, name, instructions }),
       });
-      const data: { memo?: string; error?: string } = await res.json();
+      const data: { memo?: string; error?: string; usage?: Record<string, number> } = await res.json();
 
       if (!res.ok || data.error) {
         setErrorMsg(data.error ?? "Failed to generate document.");
@@ -37,6 +39,7 @@ export default function SynthesisEngine({ dataset, country, name }: Props) {
         return;
       }
 
+      if (data.usage) addUsage(data.usage);
       setMemo(data.memo ?? "");
       setStatus("done");
     } catch (err) {

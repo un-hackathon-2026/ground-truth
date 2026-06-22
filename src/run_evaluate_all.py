@@ -49,7 +49,10 @@ def main() -> None:
 
     # Phase 2: evaluate every candidate (no user selection)
     report = evaluate_agentic(refined, selected_codes=all_codes, labels=labels)
-    print(report.model_dump_json())
+    from . import usage_tracker
+    out = json.loads(report.model_dump_json())
+    out["usage"] = usage_tracker.totals()
+    print(json.dumps(out))
 
 
 if __name__ == "__main__":

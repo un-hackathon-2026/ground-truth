@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import ChatContainer from "./ChatContainer";
 import AnalysisConfig from "./AnalysisConfig";
 import type { ClarificationQuestion, MultiDatasetReport } from "@/types/pipeline";
+import { useTokens } from "@/lib/tokenContext";
 
 // ─── Message types ─────────────────────────────────────────────────────────────
 
@@ -49,6 +50,8 @@ function restoreStage(msgs: ChatMessage[]): Stage {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function TrustApp() {
+  const { addUsage } = useTokens();
+
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
     readStorage<ChatMessage[]>("messages", [])
   );
@@ -92,7 +95,7 @@ export default function TrustApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: trimmed }),
       });
-      const data: ClarificationQuestion & { error?: string } = await res.json();
+      const data: ClarificationQuestion & { error?: string; usage?: Record<string, number> } = await res.json();
 
       if (!res.ok || data.error) {
         setMessages((prev) => [
@@ -103,6 +106,7 @@ export default function TrustApp() {
         return;
       }
 
+      if (data.usage) addUsage(data.usage);
       setMessages((prev) => [...prev, { kind: "clarification", data }]);
       setStage("awaiting_clarification");
     } catch (err) {
@@ -133,7 +137,7 @@ export default function TrustApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: pendingQuery, context: answer }),
       });
-      const data: MultiDatasetReport & { error?: string } = await res.json();
+      const data: MultiDatasetReport & { error?: string; usage?: Record<string, number> } = await res.json();
 
       if (!res.ok || data.error) {
         setMessages((prev) => [
@@ -153,6 +157,7 @@ export default function TrustApp() {
         return;
       }
 
+      if (data.usage) addUsage(data.usage);
       setMessages((prev) => [...prev, { kind: "report", data }]);
       setStage("complete");
     } catch (err) {

@@ -11,8 +11,11 @@ def main() -> None:
         sys.exit(1)
 
     from .agentic_pipeline import generate_clarification
+    from . import usage_tracker
     result = generate_clarification(query)
-    print(result.model_dump_json())
+    out = json.loads(result.model_dump_json())
+    out["usage"] = usage_tracker.totals()
+    print(json.dumps(out))
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import Providers from "@/components/Providers";
 
 export const metadata: Metadata = {
   title: "UN Data Commons — Trust & Viability Copilot",
@@ -16,11 +17,13 @@ export default function RootLayout({
   return (
     <html lang="en" className="antialiased">
       <body className="flex flex-col bg-gray-100">
-        <Header />
-        <main className="flex-1 pt-16 pb-14">
-          {children}
-        </main>
-        <Footer />
+        <Providers>
+          <Header />
+          <main className="flex-1 pt-16 pb-14">
+            {children}
+          </main>
+          <Footer />
+        </Providers>
       </body>
     </html>
   );

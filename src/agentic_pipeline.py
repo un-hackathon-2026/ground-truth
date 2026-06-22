@@ -47,6 +47,7 @@ from .integrate import (
     to_cross_source_dimension, extended_verdict, chain_recommendations,
 )
 from .commons_search import find_indicators
+from . import usage_tracker
 
 import requests
 
@@ -135,6 +136,8 @@ def parse_concept(raw_query: str) -> AgenticQuery:
         tools=[_CONCEPT_TOOL],
         tool_choice={"type": "function", "function": {"name": "extract_concept"}},
     )
+    if resp.usage:
+        usage_tracker.record(resp.usage.prompt_tokens, resp.usage.completion_tokens)
     calls = resp.choices[0].message.tool_calls
     if not calls:
         raise RuntimeError("LLM did not extract a concept.")
@@ -213,6 +216,8 @@ def generate_clarification(raw_query: str) -> ClarificationQuestion:
         tools=[_CLARIFY_TOOL],
         tool_choice={"type": "function", "function": {"name": "generate_clarification"}},
     )
+    if resp.usage:
+        usage_tracker.record(resp.usage.prompt_tokens, resp.usage.completion_tokens)
     calls = resp.choices[0].message.tool_calls
     if not calls:
         raise RuntimeError("LLM did not generate a clarification question.")

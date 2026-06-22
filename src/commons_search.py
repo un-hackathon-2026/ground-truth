@@ -201,7 +201,12 @@ def _call_groq(user_msg: str) -> Optional[str]:
             timeout=40)
         if r.status_code != 200:
             return None
-        return r.json()["choices"][0]["message"]["content"]
+        body = r.json()
+        u = body.get("usage", {})
+        if u:
+            from . import usage_tracker
+            usage_tracker.record(u.get("prompt_tokens", 0), u.get("completion_tokens", 0))
+        return body["choices"][0]["message"]["content"]
     except (requests.RequestException, KeyError):
         return None
 
