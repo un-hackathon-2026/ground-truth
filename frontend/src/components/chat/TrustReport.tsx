@@ -466,7 +466,7 @@ export default function TrustReport({ data, onQuerySuggestion }: Props) {
             ? <CheckCircle className="w-3.5 h-3.5" strokeWidth={2.5} />
             : <XCircle className="w-3.5 h-3.5" strokeWidth={2.5} />
           }
-          {data.overall_status.replace("_", " ")}
+          {isViable ? "PASS" : "REJECT"}
         </span>
       </div>
 
