@@ -11,6 +11,63 @@ import {
 
 type ChartType = "Line Chart" | "Area Chart" | "Bar Chart";
 
+// ─── Unit formatter ───────────────────────────────────────────────────────────
+
+function formatUnit(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const u = raw.trim().toUpperCase();
+
+  const exact: Record<string, string> = {
+    "SDG_PERCENT": "%",
+    "PERCENT": "%",
+    "PCT": "%",
+    "%": "%",
+    "SDG_PER_1000_LIVE_BIRTHS": "per 1,000 live births",
+    "SDG_PER_1000": "per 1,000",
+    "PER_1000": "per 1,000",
+    "SDG_PER_100000": "per 100,000",
+    "SDG_PER_100_000": "per 100,000",
+    "PER_100000": "per 100,000",
+    "SDG_NUMBER": "",
+    "NUMBER": "",
+    "COUNT": "",
+    "SDG_RATIO": "ratio",
+    "RATIO": "ratio",
+    "SDG_SHARE": "share",
+    "SHARE": "share",
+    "SDG_INDEX": "index",
+    "INDEX": "index",
+    "USD": "USD",
+    "USD_PPP": "USD (PPP)",
+    "CONSTANT_USD": "constant USD",
+    "YEARS": "years",
+    "YEAR": "years",
+    "DAYS": "days",
+    "DAY": "days",
+    "KG": "kg",
+    "KG_PER_CAPITA": "kg per capita",
+    "TONNES": "metric tonnes",
+    "METRIC_TONS": "metric tons",
+    "MT": "metric tons",
+    "KILOWATT": "kW",
+    "GIGAWATT": "GW",
+    "RATE": "rate",
+  };
+
+  if (exact[u] !== undefined) return exact[u];
+
+  // Pattern fallbacks
+  if (u.includes("PERCENT") || u.endsWith("_PCT")) return "%";
+  if (u.includes("PER_1000_LIVE")) return "per 1,000 live births";
+  if (u.includes("PER_1000")) return "per 1,000";
+  if (u.includes("PER_100000") || u.includes("PER_100_000")) return "per 100,000";
+  if (u.includes("NUMBER")) return "";
+
+  // Strip leading SDG_ and humanize
+  const stripped = u.startsWith("SDG_") ? u.slice(4) : u;
+  return stripped.toLowerCase().replace(/_/g, " ");
+}
+
 const CHART_TYPES: ChartType[] = ["Line Chart", "Area Chart", "Bar Chart"];
 
 interface DataPoint {
@@ -228,7 +285,7 @@ function LoadedState({ title, dataset, country, verdict, onDataLoaded }: LoadedP
         if (json.error) { setError(json.error); return; }
         const pts = json.rows.map((r) => ({ year: String(r.year), value: r.value }));
         setData(pts);
-        setUnit(json.unit ?? "");
+        setUnit(formatUnit(json.unit));
         setSourceOrg(json.source_org ?? dataset);
         setTimeCoverage(json.time_coverage ?? "");
         setMethodologyNote(json.methodology_note ?? "");
