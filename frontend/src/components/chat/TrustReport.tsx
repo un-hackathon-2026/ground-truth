@@ -7,8 +7,10 @@ import {
   ArrowRight,
   ExternalLink,
   BarChart2,
+  ShieldAlert,
+  ShieldCheck,
+  Info,
 } from "lucide-react";
-
 import type { MultiDatasetReport, CandidateResult, CrossSourceScore } from "@/types/pipeline";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -34,6 +36,261 @@ function browserUrl(indicatorCode: string) {
 function dashboardHref(indicatorCode: string, geography: string, name: string) {
   const p = new URLSearchParams({ dataset: indicatorCode, country: geography, name });
   return `/policy-dashboard?${p.toString()}`;
+}
+
+// ─── Responsible Use Assessment ───────────────────────────────────────────────
+
+interface UseAssessment {
+  suitableFor: string[];
+  notSuitableFor: string[];
+  keyRisks: string[];
+}
+
+function buildUseAssessment(data: MultiDatasetReport): UseAssessment {
+  const suitableFor: string[] = [];
+  const notSuitableFor: string[] = [];
+  const keyRisks: string[] = [];
+
+  const cs = data.candidates;
+  if (!cs.length) return { suitableFor, notSuitableFor, keyRisks };
+
+  const passing = cs.filter(c => c.verdict === "PASS");
+  const reviewing = cs.filter(c => c.verdict === "REVIEW");
+
+  // Freshness analysis
+  const lastYears = cs
+    .map(c => Number(c.dataset_info.last_updated))
+    .filter(y => !isNaN(y) && y > 1990);
+  const maxLastYear = lastYears.length ? Math.max(...lastYears) : null;
+  const freshScores = cs.map(c => c.dimension_scores.freshness.score);
+  const avgFreshness = freshScores.reduce((a, b) => a + b, 0) / freshScores.length;
+
+  // Row count / trend ability
+  const rowCounts = cs.map(c => c.dataset_info.row_count ?? 0);
+  const maxRows = Math.max(...rowCounts);
+  const thinCount = cs.filter(c => (c.dataset_info.row_count ?? 0) <= 3).length;
+
+  // Cross-source
+  const hasConflict = cs.some(c => c.dimension_scores.cross_source?.status === "CONFLICT");
+  const allSingleSource = cs.every(
+    c => c.dimension_scores.cross_source?.status === "SINGLE_SOURCE" ||
+         c.dimension_scores.cross_source?.status === "NO_DATA"
+  );
+
+  // Coverage
+  const yearsRanges = cs
+    .filter(c => c.dataset_info.years_in_data)
+    .map(c => c.dataset_info.years_in_data!);
+  const allStart = yearsRanges.length ? Math.min(...yearsRanges.map(r => r[0])) : null;
+  const allEnd = yearsRanges.length ? Math.max(...yearsRanges.map(r => r[1])) : null;
+
+  // Build suitable-for
+  if (passing.length > 0) {
+    if (allStart && allEnd) {
+      suitableFor.push(`Historical trend analysis within the ${allStart}–${allEnd} coverage period`);
+    }
+    suitableFor.push("SDG progress monitoring and policy baseline reporting");
+    if (avgFreshness >= 0.6) {
+      suitableFor.push("Inclusion in ministerial briefings with full source attribution");
+    }
+  }
+  if (reviewing.length > 0) {
+    suitableFor.push("Exploratory analysis when findings are presented with caveats");
+  }
+
+  // Build not-suitable-for
+  if (avgFreshness < 0.45) {
+    notSuitableFor.push(
+      `Real-time or current-year decisions — most recent observation: ${maxLastYear ?? "before 2022"}`
+    );
+  }
+  if (thinCount > 0 && thinCount === cs.length) {
+    notSuitableFor.push(
+      `Statistical trend modeling or regression — insufficient observations (max ${maxRows})`
+    );
+  }
+  if (hasConflict) {
+    notSuitableFor.push(
+      "Definitive cross-source conclusions without expert reconciliation of source conflicts"
+    );
+  }
+  if (data.overall_status === "NOT_VIABLE") {
+    notSuitableFor.push("Any policy decision without first sourcing higher-quality alternative data");
+  }
+
+  // Key risks
+  if (hasConflict) {
+    const conflicted = cs.filter(c => c.dimension_scores.cross_source?.status === "CONFLICT");
+    for (const c of conflicted) {
+      const spread = c.dimension_scores.cross_source?.spread_pct;
+      keyRisks.push(
+        `${c.dataset_info.indicator_name ?? c.dataset_info.indicator_code}: authoritative sources disagree` +
+        (spread != null ? ` (${spread.toFixed(0)}% value spread)` : "")
+      );
+    }
+  }
+  if (allSingleSource && passing.length > 0) {
+    keyRisks.push("All viable datasets come from a single source — independent cross-validation was not possible");
+  }
+  if (avgFreshness < 0.3) {
+    keyRisks.push(
+      `Significant temporal gap — data may not reflect conditions after ${maxLastYear ?? "the last update"}`
+    );
+  }
+
+  return { suitableFor, notSuitableFor, keyRisks };
+}
+
+function ResponsibleUseCard({ data }: { data: MultiDatasetReport }) {
+  const { suitableFor, notSuitableFor, keyRisks } = buildUseAssessment(data);
+  const isViable = data.overall_status === "VIABLE";
+
+  return (
+    <div className={`rounded-xl border p-4 space-y-3 ${
+      isViable ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"
+    }`}>
+      <div className="flex items-center gap-2">
+        {isViable
+          ? <ShieldCheck className="w-4 h-4 text-green-600 flex-shrink-0" strokeWidth={2} />
+          : <ShieldAlert className="w-4 h-4 text-amber-600 flex-shrink-0" strokeWidth={2} />
+        }
+        <span className={`text-xs font-bold uppercase tracking-wide ${
+          isViable ? "text-green-700" : "text-amber-700"
+        }`}>
+          {isViable ? "Responsible Use Assessment — Query is answerable" : "Responsible Use Assessment — Limited viability"}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {suitableFor.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
+              <CheckCircle className="w-3 h-3 text-green-500" strokeWidth={2.5} />
+              Suitable for
+            </p>
+            <ul className="space-y-1">
+              {suitableFor.map((item, i) => (
+                <li key={i} className="text-xs text-gray-700 flex gap-1.5">
+                  <span className="text-green-500 mt-0.5 flex-shrink-0">·</span>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {notSuitableFor.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-gray-600 mb-1.5 flex items-center gap-1">
+              <XCircle className="w-3 h-3 text-red-400" strokeWidth={2.5} />
+              Not suitable for
+            </p>
+            <ul className="space-y-1">
+              {notSuitableFor.map((item, i) => (
+                <li key={i} className="text-xs text-gray-700 flex gap-1.5">
+                  <span className="text-red-400 mt-0.5 flex-shrink-0">·</span>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {keyRisks.length > 0 && (
+        <div className="border-t border-amber-200 pt-2.5">
+          <p className="text-xs font-semibold text-amber-700 mb-1.5 flex items-center gap-1">
+            <AlertTriangle className="w-3 h-3" strokeWidth={2.5} />
+            Key risks
+          </p>
+          <ul className="space-y-1">
+            {keyRisks.map((risk, i) => (
+              <li key={i} className="text-xs text-amber-800 flex gap-1.5">
+                <span className="flex-shrink-0 mt-0.5">·</span>
+                {risk}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Dataset Comparison Table ──────────────────────────────────────────────────
+
+function ComparisonTable({ candidates }: { candidates: CandidateResult[] }) {
+  if (candidates.length < 2) return null;
+
+  return (
+    <div className="rounded-xl border border-gray-200 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+        <Info className="w-3.5 h-3.5 text-gray-400" strokeWidth={2} />
+        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          Dataset Comparison
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-gray-100">
+              <th className="text-left px-3 py-2 font-semibold text-gray-500">Indicator</th>
+              <th className="text-center px-3 py-2 font-semibold text-gray-500">Coverage</th>
+              <th className="text-center px-3 py-2 font-semibold text-gray-500">Obs.</th>
+              <th className="text-center px-3 py-2 font-semibold text-gray-500">Metadata</th>
+              <th className="text-center px-3 py-2 font-semibold text-gray-500">Quality</th>
+              <th className="text-center px-3 py-2 font-semibold text-gray-500">Freshness</th>
+              <th className="text-center px-3 py-2 font-semibold text-gray-500">Verdict</th>
+            </tr>
+          </thead>
+          <tbody>
+            {candidates.map((c, i) => {
+              const s = c.dimension_scores;
+              const v = verdictStyles(c.verdict);
+              return (
+                <tr key={i} className={`border-b border-gray-50 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
+                  <td className="px-3 py-2 max-w-[180px]">
+                    <p className="font-medium text-gray-800 truncate" title={c.dataset_info.indicator_name ?? c.dataset_info.indicator_code}>
+                      {c.dataset_info.indicator_name ?? c.dataset_info.indicator_code}
+                    </p>
+                    <p className="text-gray-400 font-mono text-[10px] truncate">{c.dataset_info.source_org}</p>
+                  </td>
+                  <td className="px-3 py-2 text-center text-gray-600">
+                    {c.dataset_info.years_in_data
+                      ? `${c.dataset_info.years_in_data[0]}–${c.dataset_info.years_in_data[1]}`
+                      : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-center text-gray-600">
+                    {c.dataset_info.row_count ?? "—"}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <span className={`font-semibold ${scoreColors(s.metadata_completeness.score).text}`}>
+                      {Math.round(s.metadata_completeness.score * 100)}%
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <span className={`font-semibold ${scoreColors(s.data_quality.score).text}`}>
+                      {Math.round(s.data_quality.score * 100)}%
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <span className={`font-semibold ${scoreColors(s.freshness.score).text}`}>
+                      {Math.round(s.freshness.score * 100)}%
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${v.bg} ${v.text}`}>
+                      {v.label}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
@@ -101,7 +358,6 @@ function CandidateCard({ c }: { c: CandidateResult }) {
           {c.dataset_info.indicator_code}
         </p>
 
-        {/* Source — always a clickable link */}
         <a
           href={url}
           target="_blank"
@@ -197,7 +453,7 @@ export default function TrustReport({ data, onQuerySuggestion }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Overall status badge */}
+      {/* Overall verdict */}
       <div className="flex items-center gap-3">
         <span className="text-sm font-medium text-gray-600">Overall verdict:</span>
         <span
@@ -213,7 +469,15 @@ export default function TrustReport({ data, onQuerySuggestion }: Props) {
         </span>
       </div>
 
-      {/* Per-candidate cards — each has its own Visualize button */}
+      {/* Responsible Use Assessment */}
+      {data.candidates.length > 0 && <ResponsibleUseCard data={data} />}
+
+      {/* Comparison table — only when 2+ candidates */}
+      {data.candidates.length >= 2 && (
+        <ComparisonTable candidates={data.candidates} />
+      )}
+
+      {/* Per-candidate detail cards */}
       {data.candidates.length > 0 ? (
         <div className="space-y-3">
           {data.candidates.map((c, i) => <CandidateCard key={i} c={c} />)}

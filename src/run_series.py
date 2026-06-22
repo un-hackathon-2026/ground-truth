@@ -38,6 +38,9 @@ def main() -> None:
         "unit": metadata.unit,
         "source_org": metadata.source_org,
         "time_coverage": metadata.time_coverage,
+        "methodology_note": metadata.methodology_note,
+        "license_url": metadata.license,
+        "last_updated": metadata.last_updated,
     }))
 
 

@@ -23,6 +23,9 @@ interface SeriesResponse {
   unit?: string | null;
   source_org?: string | null;
   time_coverage?: string | null;
+  methodology_note?: string | null;
+  license_url?: string | null;
+  last_updated?: string | null;
   error?: string;
 }
 
@@ -121,6 +124,10 @@ function LoadedState({ title, dataset, country }: LoadedProps) {
   const [data, setData] = useState<DataPoint[]>([]);
   const [unit, setUnit] = useState("");
   const [sourceOrg, setSourceOrg] = useState("");
+  const [timeCoverage, setTimeCoverage] = useState("");
+  const [methodologyNote, setMethodologyNote] = useState("");
+  const [licenseUrl, setLicenseUrl] = useState("");
+  const [lastUpdated, setLastUpdated] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -143,6 +150,10 @@ function LoadedState({ title, dataset, country }: LoadedProps) {
         setData(json.rows.map((r) => ({ year: String(r.year), value: r.value })));
         setUnit(json.unit ?? "");
         setSourceOrg(json.source_org ?? dataset);
+        setTimeCoverage(json.time_coverage ?? "");
+        setMethodologyNote(json.methodology_note ?? "");
+        setLicenseUrl(json.license_url ?? "");
+        setLastUpdated(json.last_updated ?? "");
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
@@ -306,6 +317,50 @@ function LoadedState({ title, dataset, country }: LoadedProps) {
         <p className="text-xs text-gray-400 mt-3 text-right">
           Source: UN Data Commons · {sourceOrg || dataset} · {data.length} observations
         </p>
+      )}
+
+      {/* Data Provenance */}
+      {!loading && !error && data.length > 0 && (
+        <div className="mt-4 border-t border-gray-100 pt-4">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Data Provenance</p>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+            <div>
+              <dt className="text-gray-400">Source organisation</dt>
+              <dd className="text-gray-700 font-medium mt-0.5">
+                {licenseUrl ? (
+                  <a href={licenseUrl} target="_blank" rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline">
+                    {sourceOrg || dataset}
+                  </a>
+                ) : (sourceOrg || dataset)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-gray-400">Indicator code</dt>
+              <dd className="text-gray-700 font-mono mt-0.5 truncate">{dataset}</dd>
+            </div>
+            <div>
+              <dt className="text-gray-400">Time coverage</dt>
+              <dd className="text-gray-700 font-medium mt-0.5">{timeCoverage || "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-gray-400">Last updated</dt>
+              <dd className="text-gray-700 font-medium mt-0.5">{lastUpdated || "—"}</dd>
+            </div>
+            {unit && (
+              <div>
+                <dt className="text-gray-400">Unit of measurement</dt>
+                <dd className="text-gray-700 font-medium mt-0.5">{unit}</dd>
+              </div>
+            )}
+            {methodologyNote && (
+              <div className="col-span-2">
+                <dt className="text-gray-400">Measurement method</dt>
+                <dd className="text-gray-600 mt-0.5 leading-relaxed">{methodologyNote}</dd>
+              </div>
+            )}
+          </dl>
+        </div>
       )}
     </div>
   );
