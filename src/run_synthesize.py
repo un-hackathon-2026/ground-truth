@@ -15,9 +15,20 @@ def main() -> None:
     name = (payload.get("name") or dataset).strip()
     instructions = (payload.get("instructions") or "").strip()
 
-    if not dataset or not country or not instructions:
-        print(json.dumps({"error": "dataset, country, and instructions are required"}))
+    if not dataset or not country:
+        print(json.dumps({"error": "dataset and country are required"}))
         sys.exit(1)
+
+    if not instructions:
+        instructions = (
+            "Write a comprehensive evidence brief for a senior policy audience. "
+            "Structure the brief with: EXECUTIVE SUMMARY (2-3 sentences), KEY FINDINGS "
+            "(bullet points citing specific years and values), TREND ANALYSIS (describe "
+            "the direction and magnitude of change over the observed period), POLICY "
+            "IMPLICATIONS (what this data means for decision-makers), and RECOMMENDED "
+            "NEXT STEPS (concrete actions or data gaps to address). "
+            "Ground every claim in the actual data provided. Be precise and professional."
+        )
 
     from .agentic_pipeline import _fetch_commons_dataset, _client
 

@@ -5,6 +5,7 @@ interface SearchParams {
   dataset?: string;
   country?: string;
   name?: string;
+  verdict?: string;
 }
 
 export default async function PolicyDashboardPage({
@@ -12,7 +13,7 @@ export default async function PolicyDashboardPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const { dataset, country, name } = await searchParams;
+  const { dataset, country, name, verdict } = await searchParams;
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-7">
@@ -23,7 +24,7 @@ export default async function PolicyDashboardPage({
       </nav>
 
       <div className="space-y-5">
-        <DashboardClient dataset={dataset} country={country} name={name} />
+        <DashboardClient dataset={dataset} country={country} name={name} verdict={verdict} />
       </div>
     </div>
   );

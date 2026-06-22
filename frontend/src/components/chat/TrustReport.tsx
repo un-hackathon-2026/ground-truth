@@ -33,8 +33,8 @@ function browserUrl(indicatorCode: string) {
   return `https://datacommons.org/browser/${indicatorCode}`;
 }
 
-function dashboardHref(indicatorCode: string, geography: string, name: string) {
-  const p = new URLSearchParams({ dataset: indicatorCode, country: geography, name });
+function dashboardHref(indicatorCode: string, geography: string, name: string, verdict: string) {
+  const p = new URLSearchParams({ dataset: indicatorCode, country: geography, name, verdict });
   return `/policy-dashboard?${p.toString()}`;
 }
 
@@ -340,6 +340,7 @@ function CandidateCard({ c }: { c: CandidateResult }) {
     c.dataset_info.indicator_code,
     c.dataset_info.geography,
     c.dataset_info.indicator_name ?? c.dataset_info.indicator_code,
+    c.verdict,
   );
 
   return (
