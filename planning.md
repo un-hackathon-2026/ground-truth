@@ -199,3 +199,106 @@ Listed here so they aren't accidentally built early, and so the upgrade path is 
 5. Add Step 4's narration LLM call and assemble the final report output.
 
 This order front-loads the deterministic, testable core and treats both LLM calls as the last, most replaceable pieces — consistent with the principle that judgment should be earned by evidence, not assumed by the model.
+
+
+## 8. FRONTEND PLANNING: Trust & Viability Copilot 
+**Tech Stack:** React (Next.js preferred for API route handling), Tailwind CSS, Lucide React (for icons).
+
+## 2. Global Layout & Styling
+Follow the provided high-fidelity mockups for styling. The design system is clean, enterprise-grade, and minimalist.
+* **Colors:** White/Off-white backgrounds, distinct blue accents for active states and primary buttons (`bg-blue-500` or similar), gray text for secondary information.
+* **Typography:** Sans-serif, clean hierarchy.
+* **Structure:**
+    * **Header:** Fixed top. Left: "UNITED NATIONS Data Commons Platform" logo. Center: Toggle buttons for "Ground-Truth Trust Filter" (Active) and "Policy Dashboard". Right: Language dropdown ("English").
+    * **Main Container:** Centered, max-width constrained, light gray background to pop the white cards.
+    * **Footer (Sticky Bottom):** Dark banner displaying active system stats (System Name, Active Model, Live Connection status, Token usage, Cost tracker).
+
+## 3. Core Components
+
+### A. The Agentic Chat Interface (Page 1 equivalent)
+* **Component:** `ChatContainer.tsx`
+* **Behavior:** Displays the conversation history. 
+* **Initial State:** Shows a card with a blue shield icon and the text: "Data Gatekeeper Agent: Evaluating APIs against UN Schema". Below it, an initial system message bubble: "Hello. I am the Trust & Viability Co-pilot. What metric or topic are you looking to analyze?"
+
+### B. The Analysis Configuration Panel (Page 2 equivalent)
+* **Component:** `AnalysisConfig.tsx`
+* **Search Bar:** Large input field with a search icon (e.g., placeholder "child mortality rate in kenya 2020-2024") and a prominent "Analyze" button.
+* **Radio Selectors:** Two distinct card-style radio buttons for "Single Dataset Analysis" and "Multi-Dataset Join". Active state should have a blue border and blue radio indicator.
+* **Readiness Bar:** A progress bar component labeled "System Readiness" (status: PENDING, EVALUATING, READY).
+* **Call to Action:** A large, disabled-by-default "Proceed to Visualization" button.
+
+## 4. Backend Integration & Parsing Logic (CRITICAL)
+The current backend outputs a raw terminal string (e.g., "TRUST & VIABILITY REPORT... Overall: VIABLE"). Do not simply dump this raw text into the UI.
+
+**Task for AI:** Create an API route (e.g., `/api/evaluate`) that executes the backend script. 
+* **If the backend returns JSON:** Map the JSON to the UI components.
+* **If the backend returns raw terminal text:** Write a utility function (`parseTerminalOutput(text)`) on the server side that extracts:
+    1.  Candidate Datasets (Name, ID)
+    2.  Overall Status (VIABLE / CONFLICT)
+    3.  Scores (Metadata %, Quality %, Freshness %)
+    4.  Source Conflicts (List of differing values and sources)
+* Pass this structured object to the frontend.
+
+## 5. Implementation Steps for Claude Code
+1.  **Initialize:** Set up the React/Next.js environment and install Tailwind CSS and Lucide React.
+2.  **Scaffold Layout:** Build the Header and the dark Footer (with hardcoded placeholder stats for now).
+3.  **Build Static UI:** Implement the `AnalysisConfig` panel and the initial `ChatContainer` state exactly as shown in the screenshots.
+4.  **Connect Backend:** Create the API wrapper to call the existing backend script. Implement the text-parsing utility to convert the terminal output into a structured JavaScript object.
+5.  **Dynamic Rendering:** Update the `ChatContainer` to display the parsed backend data as formatted UI cards (e.g., a green "Viable" badge, a red "Conflict" warning box, and a clean list of candidate datasets) instead of a single block of monospace text.
+6.  **State Management:** Wire the "Analyze" button to trigger the API, show a loading state on the "System Readiness" bar, and unlock the "Proceed to Visualization" button upon success.
+
+## Design mockups
+
+### Image 1
+![Design mockup 1](design_mockup/image1.png)
+
+### Image 2
+![Design mockup 2](design_mockup/image2.png)
+
+
+## 8. FRONTEND PLANNING: Policy Dashboard
+Implement the "Policy Dashboard" view for the UN Data Commons web application. This page serves two purposes:
+1. **Integrated Flow:** It receives verified dataset parameters handed off from the "Ground-Truth Trust Filter" page via the "Proceed to Visualization" button.
+2. **Standalone Flow:** It allows users to directly input a UN Data Commons API endpoint to generate a visualization independently.
+
+**Tech Stack:** Next.js (App Router), Tailwind CSS, Lucide React, Recharts (or Chart.js) for data visualization.
+
+## 2. Global Navigation & Handoff Logic
+* **Routing:** Ensure the top navigation tabs ("Ground-Truth Trust Filter" and "Policy Dashboard") correctly route between `/` (or `/trust-filter`) and `/policy-dashboard`.
+* **State Transfer:** When a user clicks "Proceed to Visualization" on the Trust Filter page, pass the dataset ID and metadata (e.g., `?dataset=sdg/SH_H2O_SAFE&country=BGD`) via URL search parameters or a global context provider.
+
+## 3. Core Components
+
+### A. The Visualization Panel (Top Section)
+* **Component:** `VisualizationCard.tsx`
+* **Empty State (For Standalone Use):** If no URL parameters are detected, display a centered input field labeled "Enter Data Commons API Endpoint" with a "Load Data" button.
+* **Loaded State (From Handoff or API Input):** * **Header:** Display the dataset title (e.g., "Under-5 Mortality Rate (Kenya)").
+    * **Controls (Top Right):** * Checkbox: "Include Citations" (Appends source watermarks/text to the chart).
+        * Dropdown: Chart Type selector (Bar Chart, Line Chart, Pie Chart).
+        * Button (Icon): "Download Chart" (Uses standard canvas export to save the chart as a PNG/SVG).
+    * **Chart Area:** Use Recharts to render a placeholder chart with standard X/Y axes (e.g., Years 2020-2024 on the X-axis).
+
+### B. Automated Synthesis & Interpretation (Bottom Section)
+* **Component:** `SynthesisEngine.tsx`
+* **UI Layout:** Match the provided mockup. A clean, white card titled "Automated Synthesis & Interpretation" with a file-text icon.
+* **Input Area:** * Label: "INSTRUCTIONS FOR SYNTHESIS AGENT".
+    * Textarea: Large, user-friendly text box with a placeholder (e.g., "Write a 1-page policy brief for the Minister of Health highlighting the 10% reduction in mortality...").
+    * Action: A primary "Generate Document" button (disabled if the textarea is empty).
+* **Output Area (Hidden until generated):**
+    * Once the "Generate Document" button is clicked, simulate a loading state, then reveal a rich-text document area displaying the "no-jargon" policy memo.
+    * **Export Action:** Include a "Download PDF" button next to the generated text.
+
+## 4. Implementation Steps for Claude Code
+1.  **Routing & Handoff:** Wire up the "Proceed to Visualization" button on the existing Trust Filter page to push the router to `/policy-dashboard` with dummy query parameters.
+2.  **Build the Empty State:** Create the API input state for users accessing the dashboard in isolation.
+3.  **Implement the Chart UI:** Build `VisualizationCard.tsx`. Add the required dropdowns, checkboxes, and download buttons. Integrate a library like Recharts to render a dummy data visualization based on the active chart type.
+4.  **Implement the Synthesis UI:** Build `SynthesisEngine.tsx` matching the bottom half of the design mockups. 
+5.  **Interactive State:** Wire the "Generate Document" button to show a temporary loading state, then render a mock generated memo below the input box, complete with the "Download PDF" button.
+
+## Design mockups
+
+### Image 1
+![Design mockup 1](design_mockup/image3.png)
+
+### Image 2
+![Design mockup 2](design_mockup/image4.png)
