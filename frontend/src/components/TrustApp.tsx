@@ -22,14 +22,6 @@ type Stage =
   | "complete"
   | "error";
 
-export type ReadinessStatus = "PENDING" | "EVALUATING" | "READY";
-
-function stageToReadiness(stage: Stage): ReadinessStatus {
-  if (stage === "complete") return "READY";
-  if (stage === "idle" || stage === "error") return "PENDING";
-  return "EVALUATING";
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function TrustApp() {
