@@ -1,62 +1,144 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import ChatContainer from "./ChatContainer";
 import AnalysisConfig from "./AnalysisConfig";
-import type { CandidateList, MultiDatasetReport } from "@/types/pipeline";
+import type { ClarificationQuestion, MultiDatasetReport } from "@/types/pipeline";
 
 // ─── Message types ─────────────────────────────────────────────────────────────
 
 export type ChatMessage =
   | { kind: "user"; text: string }
-  | { kind: "candidates"; data: CandidateList; frozenCodes?: string[] }
-  | { kind: "selection"; text: string }
+  | { kind: "clarification"; data: ClarificationQuestion; frozenAnswer?: string }
+  | { kind: "clarification_response"; text: string }
   | { kind: "report"; data: MultiDatasetReport }
   | { kind: "error"; text: string };
 
-type Stage =
+export type Stage =
   | "idle"
-  | "loading_candidates"
-  | "awaiting_selection"
+  | "loading_clarification"
+  | "awaiting_clarification"
   | "loading_evaluation"
   | "complete"
   | "error";
 
+const STORAGE_KEY = "ground-truth:state";
+
+function readStorage<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return (parsed[key] as T) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function restoreStage(msgs: ChatMessage[]): Stage {
+  if (!msgs.length) return "idle";
+  const last = msgs[msgs.length - 1];
+  if (last.kind === "report") return "complete";
+  if (last.kind === "error") return "error";
+  if (last.kind === "clarification" && !last.frozenAnswer) return "awaiting_clarification";
+  // user / clarification_response at end = pipeline was interrupted mid-flight
+  return "idle";
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function TrustApp() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [stage, setStage] = useState<Stage>("idle");
-  const [query, setQuery] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    readStorage<ChatMessage[]>("messages", [])
+  );
+  const [query, setQuery] = useState<string>(() =>
+    readStorage<string>("query", "")
+  );
+  const [pendingQuery, setPendingQuery] = useState<string>(() =>
+    readStorage<string>("pendingQuery", "")
+  );
 
-  // Preserved across phases so evaluate can reuse them without a second LLM call
-  const [pendingQuery, setPendingQuery] = useState("");
-  const [pendingLabels, setPendingLabels] = useState<Record<string, string>>({});
+  const [stage, setStage] = useState<Stage>(() =>
+    restoreStage(readStorage<ChatMessage[]>("messages", []))
+  );
 
-  const isLoading =
-    stage === "loading_candidates" || stage === "loading_evaluation";
+  const isAnalyzing =
+    stage === "loading_clarification" || stage === "loading_evaluation";
 
-  // ── Phase 1: Discover candidates ────────────────────────────────────────────
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ messages, query, pendingQuery })
+      );
+    } catch {
+      // ignore quota errors
+    }
+  }, [messages, query, pendingQuery]);
+
+  // ── Phase 0: Ask a clarifying question ─────────────────────────────────────
   const handleAnalyze = async (q: string) => {
     const trimmed = q.trim();
-    if (!trimmed || isLoading) return;
+    if (!trimmed || isAnalyzing) return;
 
     setPendingQuery(trimmed);
     setMessages((prev) => [...prev, { kind: "user", text: trimmed }]);
-    setStage("loading_candidates");
+    setStage("loading_clarification");
 
     try {
-      const res = await fetch("/api/candidates", {
+      const res = await fetch("/api/clarify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: trimmed }),
       });
-      const data: CandidateList & { error?: string } = await res.json();
+      const data: ClarificationQuestion & { error?: string } = await res.json();
 
       if (!res.ok || data.error) {
         setMessages((prev) => [
           ...prev,
-          { kind: "error", text: data.error ?? "Failed to fetch candidates." },
+          { kind: "error", text: data.error ?? "Failed to generate clarification." },
+        ]);
+        setStage("error");
+        return;
+      }
+
+      setMessages((prev) => [...prev, { kind: "clarification", data }]);
+      setStage("awaiting_clarification");
+    } catch (err) {
+      setMessages((prev) => [...prev, { kind: "error", text: String(err) }]);
+      setStage("error");
+    }
+  };
+
+  // ── Phase 1+2: Evaluate all datasets for the refined query ─────────────────
+  const handleClarificationConfirm = async (answer: string) => {
+    // Freeze the clarification card
+    setMessages((prev) =>
+      prev.map((m, i) =>
+        i === prev.length - 1 && m.kind === "clarification"
+          ? { ...m, frozenAnswer: answer }
+          : m
+      )
+    );
+    setMessages((prev) => [
+      ...prev,
+      { kind: "clarification_response", text: answer },
+    ]);
+    setStage("loading_evaluation");
+
+    try {
+      const res = await fetch("/api/evaluate-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: pendingQuery, context: answer }),
+      });
+      const data: MultiDatasetReport & { error?: string } = await res.json();
+
+      if (!res.ok || data.error) {
+        setMessages((prev) => [
+          ...prev,
+          { kind: "error", text: data.error ?? "Evaluation failed." },
         ]);
         setStage("error");
         return;
@@ -71,69 +153,10 @@ export default function TrustApp() {
         return;
       }
 
-      const labels: Record<string, string> = {};
-      for (const o of data.options) labels[o.indicator_code] = o.indicator_name;
-      setPendingLabels(labels);
-
-      setMessages((prev) => [...prev, { kind: "candidates", data }]);
-      setStage("awaiting_selection");
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        { kind: "error", text: String(err) },
-      ]);
-      setStage("error");
-    }
-  };
-
-  // ── Phase 2: Evaluate selected datasets ─────────────────────────────────────
-  const handleSelectDatasets = async (
-    selectedCodes: string[],
-    selectionText: string
-  ) => {
-    // Freeze the last candidates message
-    setMessages((prev) =>
-      prev.map((m, i) =>
-        i === prev.length - 1 && m.kind === "candidates"
-          ? { ...m, frozenCodes: selectedCodes }
-          : m
-      )
-    );
-
-    setMessages((prev) => [
-      ...prev,
-      { kind: "selection", text: selectionText },
-    ]);
-    setStage("loading_evaluation");
-
-    try {
-      const res = await fetch("/api/evaluate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: pendingQuery,
-          selected_codes: selectedCodes,
-          labels: pendingLabels,
-        }),
-      });
-      const data: MultiDatasetReport & { error?: string } = await res.json();
-
-      if (!res.ok || data.error) {
-        setMessages((prev) => [
-          ...prev,
-          { kind: "error", text: data.error ?? "Evaluation failed." },
-        ]);
-        setStage("error");
-        return;
-      }
-
       setMessages((prev) => [...prev, { kind: "report", data }]);
       setStage("complete");
     } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        { kind: "error", text: String(err) },
-      ]);
+      setMessages((prev) => [...prev, { kind: "error", text: String(err) }]);
       setStage("error");
     }
   };
@@ -148,15 +171,15 @@ export default function TrustApp() {
     <div className="flex flex-col gap-4">
       <ChatContainer
         messages={messages}
-        isLoading={isLoading}
-        onSelectDatasets={handleSelectDatasets}
+        stage={stage}
+        onClarificationConfirm={handleClarificationConfirm}
         onQuerySuggestion={handleQuerySuggestion}
       />
       <AnalysisConfig
         query={query}
         onQueryChange={setQuery}
         onAnalyze={handleAnalyze}
-        isAnalyzing={isLoading}
+        isAnalyzing={isAnalyzing}
       />
     </div>
   );

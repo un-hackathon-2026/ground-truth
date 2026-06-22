@@ -83,3 +83,13 @@ export interface MultiDatasetReport {
   chain: ChainRecommendation[];
   parse_error?: string | null;
 }
+
+export interface ClarificationOption {
+  label: string;
+  description: string;
+}
+
+export interface ClarificationQuestion {
+  question: string;
+  options: ClarificationOption[];
+}

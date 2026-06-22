@@ -2,14 +2,14 @@
 
 import { useEffect, useRef } from "react";
 import { ShieldCheck } from "lucide-react";
-import DatasetSelector from "./chat/DatasetSelector";
+import ClarificationCard from "./chat/ClarificationCard";
 import TrustReport from "./chat/TrustReport";
-import type { ChatMessage } from "./TrustApp";
+import type { ChatMessage, Stage } from "./TrustApp";
 
 interface Props {
   messages: ChatMessage[];
-  isLoading: boolean;
-  onSelectDatasets: (codes: string[], selectionText: string) => void;
+  stage: Stage;
+  onClarificationConfirm: (answer: string) => void;
   onQuerySuggestion: (query: string) => void;
 }
 
@@ -39,15 +39,27 @@ function AgentBubble({ children }: { children: React.ReactNode }) {
 
 export default function ChatContainer({
   messages,
-  isLoading,
-  onSelectDatasets,
+  stage,
+  onClarificationConfirm,
   onQuerySuggestion,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const isLoading = stage === "loading_clarification" || stage === "loading_evaluation";
+
+  const loadingText =
+    stage === "loading_clarification"
+      ? "Thinking about your question…"
+      : "Searching the UN Data Commons and evaluating datasets…";
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
+
+  // The last clarification message (to wire up the confirm callback)
+  const lastClarificationIdx = messages.reduce<number>(
+    (acc, m, i) => (m.kind === "clarification" ? i : acc),
+    -1
+  );
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
@@ -62,7 +74,7 @@ export default function ChatContainer({
             Data Gatekeeper Agent
           </h2>
           <p className="text-sm text-gray-500 leading-tight mt-0.5">
-            Evaluating APIs against UN Schema
+            Evaluating datasets against UN Data Commons
           </p>
         </div>
       </div>
@@ -81,37 +93,27 @@ export default function ChatContainer({
         </AgentBubble>
 
         {messages.map((msg, i) => {
-          const isLastCandidates =
-            msg.kind === "candidates" &&
-            messages.findLastIndex((m) => m.kind === "candidates") === i;
+          const isLastClarification = i === lastClarificationIdx;
 
           switch (msg.kind) {
             case "user":
+            case "clarification_response":
               return <UserBubble key={i} text={msg.text} />;
 
-            case "candidates":
+            case "clarification":
               return (
                 <AgentBubble key={i}>
-                  <DatasetSelector
-                    topic={msg.data.topic}
-                    geography={msg.data.geography}
-                    options={msg.data.options}
-                    frozenSelection={
-                      // Freeze if this is not the last candidates msg, or
-                      // if the user has already confirmed a selection
-                      msg.frozenCodes
-                    }
-                    onSelect={
-                      isLastCandidates && !msg.frozenCodes
-                        ? onSelectDatasets
+                  <ClarificationCard
+                    data={msg.data}
+                    frozenAnswer={msg.frozenAnswer}
+                    onConfirm={
+                      isLastClarification && !msg.frozenAnswer
+                        ? onClarificationConfirm
                         : undefined
                     }
                   />
                 </AgentBubble>
               );
-
-            case "selection":
-              return <UserBubble key={i} text={msg.text} />;
 
             case "report":
               return (
@@ -157,7 +159,7 @@ export default function ChatContainer({
                 ))}
               </span>
               <span className="text-xs text-blue-600 font-medium">
-                Running evaluation pipeline…
+                {loadingText}
               </span>
             </div>
           </AgentBubble>

@@ -8,6 +8,7 @@ import {
   ExternalLink,
   BarChart2,
 } from "lucide-react";
+
 import type { MultiDatasetReport, CandidateResult, CrossSourceScore } from "@/types/pipeline";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -77,8 +78,12 @@ function CrossSourceBadge({ cs }: { cs: CrossSourceScore }) {
 function CandidateCard({ c }: { c: CandidateResult }) {
   const v = verdictStyles(c.verdict);
   const s = c.dimension_scores;
-  const isPass = c.verdict === "PASS";
   const url = browserUrl(c.dataset_info.indicator_code);
+  const vizHref = dashboardHref(
+    c.dataset_info.indicator_code,
+    c.dataset_info.geography,
+    c.dataset_info.indicator_name ?? c.dataset_info.indicator_code,
+  );
 
   return (
     <div className="border border-gray-200 rounded-xl p-4 space-y-3">
@@ -96,24 +101,16 @@ function CandidateCard({ c }: { c: CandidateResult }) {
           {c.dataset_info.indicator_code}
         </p>
 
-        {/* Source — clickable link when PASS, plain text otherwise */}
-        {c.dataset_info.source_org && (
-          isPass ? (
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 mt-0.5 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline"
-            >
-              {c.dataset_info.source_org}
-              <ExternalLink className="w-3 h-3" strokeWidth={2} />
-            </a>
-          ) : (
-            <p className="text-xs text-gray-500 mt-0.5">
-              Source: {c.dataset_info.source_org}
-            </p>
-          )
-        )}
+        {/* Source — always a clickable link */}
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 mt-0.5 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline"
+        >
+          {c.dataset_info.source_org ?? "View on UN Data Commons"}
+          <ExternalLink className="w-3 h-3" strokeWidth={2} />
+        </a>
 
         {c.dataset_info.years_in_data && (
           <p className="text-xs text-gray-400 mt-0.5">
@@ -164,6 +161,26 @@ function CandidateCard({ c }: { c: CandidateResult }) {
           {c.operational_explanation}
         </p>
       )}
+
+      {/* Source link + visualize button */}
+      <div className="border-t border-gray-100 pt-3 space-y-2">
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:text-blue-700 hover:border-blue-200 hover:bg-blue-50 transition-colors"
+        >
+          <ExternalLink className="w-3.5 h-3.5" strokeWidth={2} />
+          View dataset source
+        </a>
+        <Link
+          href={vizHref}
+          className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors"
+        >
+          <BarChart2 className="w-3.5 h-3.5" strokeWidth={2} />
+          Visualize this dataset
+        </Link>
+      </div>
     </div>
   );
 }
@@ -177,15 +194,6 @@ interface Props {
 
 export default function TrustReport({ data, onQuerySuggestion }: Props) {
   const isViable = data.overall_status === "VIABLE";
-
-  const firstPass = data.candidates.find((c) => c.verdict === "PASS");
-  const dashHref = firstPass
-    ? dashboardHref(
-        firstPass.dataset_info.indicator_code,
-        firstPass.dataset_info.geography,
-        firstPass.dataset_info.indicator_name ?? firstPass.dataset_info.indicator_code,
-      )
-    : null;
 
   return (
     <div className="space-y-4">
@@ -205,24 +213,13 @@ export default function TrustReport({ data, onQuerySuggestion }: Props) {
         </span>
       </div>
 
-      {/* Per-candidate cards */}
+      {/* Per-candidate cards — each has its own Visualize button */}
       {data.candidates.length > 0 ? (
         <div className="space-y-3">
           {data.candidates.map((c, i) => <CandidateCard key={i} c={c} />)}
         </div>
       ) : (
         <p className="text-sm text-gray-500 italic">No candidate results returned.</p>
-      )}
-
-      {/* Proceed to Visualization — only when viable */}
-      {isViable && dashHref && (
-        <Link
-          href={dashHref}
-          className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm"
-        >
-          <BarChart2 className="w-4 h-4" strokeWidth={2} />
-          Proceed to Visualization
-        </Link>
       )}
 
       {/* Related queries */}

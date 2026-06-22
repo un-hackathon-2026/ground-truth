@@ -37,6 +37,7 @@ from .schemas import (
     DataRow, RawDataset, RawMetadata, DatasetInfo, DimensionScores,
     MetadataCompletenessScore, DataQualityScore, FreshnessScore,
     CandidateResult, MultiDatasetReport, CandidateList, CandidateOption,
+    ClarificationOption, ClarificationQuestion,
     country_name,
 )
 from .scoring import compute_dimension_scores
@@ -150,6 +151,76 @@ def parse_concept(raw_query: str) -> AgenticQuery:
 
     return AgenticQuery(raw_query, p["concept"],
                         p["geography"].upper().strip(), tr)
+
+
+# ===========================================================================
+# PHASE 0 — clarification question (LLM only, no data fetch)
+# ===========================================================================
+
+_CLARIFY_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "generate_clarification",
+        "description": "Generate a clarifying question to narrow down the user's data request.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "A concise clarifying question (one sentence).",
+                },
+                "options": {
+                    "type": "array",
+                    "description": "2–4 mutually exclusive options covering the main interpretations.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "label": {"type": "string", "description": "Short option label (2–5 words)"},
+                            "description": {"type": "string", "description": "One-sentence explanation of what this measures"},
+                        },
+                        "required": ["label", "description"],
+                    },
+                },
+            },
+            "required": ["question", "options"],
+        },
+    },
+}
+
+
+def generate_clarification(raw_query: str) -> ClarificationQuestion:
+    """
+    Generate a clarifying question from the user's query.
+    No data is fetched — purely LLM reasoning about the concept.
+    """
+    resp = _client().chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        max_tokens=600,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a UN data specialist helping a policy analyst find the right dataset. "
+                    "When given a broad query, generate a clarifying question with 2–4 distinct, "
+                    "specific options that correspond to real statistical indicators that differ "
+                    "meaningfully (e.g. 'infant mortality' vs 'under-5 mortality' are different "
+                    "indicators with different UN SDG codes). "
+                    "Keep option labels short and descriptions precise."
+                ),
+            },
+            {"role": "user", "content": raw_query},
+        ],
+        tools=[_CLARIFY_TOOL],
+        tool_choice={"type": "function", "function": {"name": "generate_clarification"}},
+    )
+    calls = resp.choices[0].message.tool_calls
+    if not calls:
+        raise RuntimeError("LLM did not generate a clarification question.")
+    p = json.loads(calls[0].function.arguments)
+    return ClarificationQuestion(
+        question=p["question"],
+        options=[ClarificationOption(**o) for o in p["options"]],
+    )
 
 
 # ===========================================================================

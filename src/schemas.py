@@ -298,6 +298,20 @@ class MultiDatasetReport(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Clarification question (pre-fetch, LLM-only)
+# ---------------------------------------------------------------------------
+
+class ClarificationOption(BaseModel):
+    label: str
+    description: str
+
+
+class ClarificationQuestion(BaseModel):
+    question: str
+    options: list[ClarificationOption]
+
+
+# ---------------------------------------------------------------------------
 # Phase 1 outputs: the candidate list the user chooses from (NEW)
 # ---------------------------------------------------------------------------
 
